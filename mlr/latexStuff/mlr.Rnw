@@ -1,0 +1,708 @@
+%%% Title:    Overview of Multiple Linear Regression
+%%% Author:   Kyle M. Lang
+%%% Created:  2018-04-12
+%%% Modified: 2021-11-01
+
+\documentclass[10pt]{beamer}
+\usetheme{Utrecht}
+
+\usepackage{graphicx}
+\usepackage[natbibapa]{apacite}
+\usepackage[libertine]{newtxmath}
+%\usepackage{fancybox}
+\usepackage{booktabs}
+
+\title{Multiple Linear Regression}
+\author{Kyle M. Lang}
+\institute{Department of Methodology \& Statistics\\Utrecht University}
+\date{}
+
+\begin{document}
+
+<<setup, include=FALSE, cache = FALSE>>=
+set.seed(235711)
+
+library(knitr)
+library(ggplot2)
+library(MASS)
+library(DAAG)
+library(xtable)
+library(MLmetrics)
+
+source("../../code/supportFunctions.R")
+
+options(width = 60)
+opts_chunk$set(size = 'footnotesize', fig.align = 'center', message = FALSE)
+knit_theme$set('edit-kwrite')
+@
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[t,plain]
+  \titlepage
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}{Outline}
+  \tableofcontents
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\section{Multiple Linear Regression}
+
+\watermarkoff %----------------------------------------------------------------%
+
+\begin{frame}{Graphical Representations of Regression Models}
+
+  A regression of two variables can be represented on a 2D scatterplot.
+  \begin{itemize}
+  \item Simple linear regression implies a 1D line in 2D space.
+  \end{itemize}
+  \vb
+  \begin{columns}
+    \begin{column}{0.45\textwidth}
+
+<<echo = FALSE, cache = TRUE>>=
+p <- ggplot(data = mtcars, mapping = aes(x = wt, y = mpg)) +
+    theme_classic() +
+    theme(text = element_text(size = 16, family = "Courier")) +
+    labs(x = "Weight", y = "MPG") +
+    geom_point(aes(size = 3), show.legend = FALSE, colour = "blue")
+p
+@
+
+\end{column}
+
+\begin{column}{0.1\textwidth}
+
+  \begin{center}\huge{$\rightarrow$}\end{center}
+
+\end{column}
+
+\begin{column}{0.45\textwidth}
+
+<<echo = FALSE, cache = TRUE>>=
+p + geom_smooth(method = "lm", se = FALSE, col = "black")
+@
+
+\end{column}
+\end{columns}
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}{Graphical Representations of Regression Models}
+
+  Adding an additional predictor leads to a 3D point cloud.
+  \vb
+  \begin{itemize}
+  \item A regression model with two IVs implies a 2D plane in 3D space.
+  \end{itemize}
+
+  \begin{columns}
+    \begin{column}{0.45\textwidth}
+
+      \includegraphics[width = 1.2\textwidth]{figures/3d_data_plot}
+
+    \end{column}
+
+    \begin{column}{0.1\textwidth}
+
+      \begin{center}\huge{$~~~~\rightarrow$}\end{center}
+
+    \end{column}
+
+    \begin{column}{0.45\textwidth}
+
+      \includegraphics[width = 1.2\textwidth]{figures/response_surface_plot}
+
+    \end{column}
+  \end{columns}
+
+\end{frame}
+
+\watermarkon %-----------------------------------------------------------------%
+
+\begin{frame}{Partial Effects}
+
+  In MLR, we want to examine the \emph{partial effects} of the predictors.
+  \vb
+  \begin{itemize}
+  \item What is the effect of a predictor after controlling for some other set
+    of variables?
+  \end{itemize}
+  \va
+  This approach is crucial to controlling confounds and adequately modeling
+  real-world phenomena.
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile]{Example}
+
+<<cache = TRUE>>=
+## Read in the 'diabetes' dataset:
+dDat <- readRDS("../data/diabetes.rds")
+
+## Simple regression with which we're familiar:
+out1 <- lm(bp ~ age, data = dDat)
+@
+
+\va
+
+\textsc{Asking}: What is the effect of age on average blood pressure?
+
+\end{frame}
+
+\watermarkoff %----------------------------------------------------------------%
+
+\begin{frame}[allowframebreaks, fragile]{Example}
+
+<<cache = TRUE>>=
+partSummary(out1, -1)
+@
+
+\end{frame}
+
+\watermarkon %-----------------------------------------------------------------%
+
+\begin{frame}[fragile]{Example}
+
+<<cache = TRUE>>=
+## Add in another predictor:
+out2 <- lm(bp ~ age + bmi, data = dDat)
+@
+
+\va
+
+\textsc{Asking}: What is the effect of BMI on average blood pressure,
+\emph{after controlling for age?}
+\vb
+\begin{itemize}
+  \item We're partialing age out of the effect of BMI on blood pressure.
+\end{itemize}
+
+\end{frame}
+
+\watermarkoff %----------------------------------------------------------------%
+
+\begin{frame}[allowframebreaks, fragile]{Example}
+
+<<cache = TRUE>>=
+partSummary(out2, -1)
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile]{Interpretation}
+
+  \begin{columns}
+    \begin{column}{0.5\textwidth}
+
+      \begin{itemize}
+      \item The expected average blood pressure for an unborn patient with a
+        negligible extent is \Sexpr{round(coef(out2)[1], 2)}.
+        \vb
+      \item For each year older, average blood pressure is expected to increase
+        by \Sexpr{round(coef(out2)['age'], 2)} points, after controlling for
+        BMI.
+        \vb
+      \item For each additional point of BMI, average blood pressure is
+        expected to increase by \Sexpr{round(coef(out2)['bmi'], 2)} points,
+        after controlling for age.
+      \end{itemize}
+
+    \end{column}
+
+    \begin{column}{0.5\textwidth}
+
+      \includegraphics[width = 1.1\textwidth]{figures/response_surface_plot2}
+
+    \end{column}
+  \end{columns}
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\section{Model Fit and Model Comparison}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile]{Multiple $R^2$}
+
+  How much variation in blood pressure is explained by the two models?
+  \begin{itemize}
+    \item Check the $R^2$ values.
+  \end{itemize}
+
+<<cache = TRUE>>=
+## Extract R^2 values:
+r2.1 <- summary(out1)$r.squared
+r2.2 <- summary(out2)$r.squared
+
+r2.1
+r2.2
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile, allowframebreaks]{F-Statistic}
+
+  How do we know if the $R^2$ values are significantly greater than zero?
+  \begin{itemize}
+  \item We use the F-statistic to test $H_0: R^2 = 0$ vs. $H_1: R^2 > 0$.
+  \end{itemize}
+
+<<>>=
+f1 <- summary(out1)$fstatistic
+f1
+pf(q = f1[1], df1 = f1[2], df2 = f1[3], lower.tail = FALSE)
+@
+
+\pagebreak
+
+<<>>=
+f2 <- summary(out2)$fstatistic
+f2
+pf(f2[1], f2[2], f2[3], lower.tail = FALSE)
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile]{Comparing Models}
+
+  How do we quantify the additional variation explained by BMI, above and beyond
+  age?
+  \begin{itemize}
+  \item Compute the $\Delta R^2$
+  \end{itemize}
+
+<<cache = TRUE>>=
+## Compute change in R^2:
+r2.2 - r2.1
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile]{Significance Testing}
+
+How do we know if $\Delta R^2$ represents a significantly greater degree of
+explained variation?
+\begin{itemize}
+\item Use an $F$-test for $H_0: \Delta R^2 = 0$ vs. $H_1: \Delta R^2 > 0$
+\end{itemize}
+
+<<>>=
+## Is that increase significantly greater than zero?
+anova(out1, out2)
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile]{Model Comparison}
+
+  We can also compare models based on their prediction errors.
+  \begin{itemize}
+  \item For OLS regression, we usually compare MSE values.
+  \end{itemize}
+  \vx{-6}
+<<>>=
+mse1 <- MSE(y_pred = predict(out1), y_true = dDat$bp)
+mse2 <- MSE(y_pred = predict(out2), y_true = dDat$bp)
+
+mse1
+mse2
+@
+
+In this case, the MSE for the model with $BMI$ included is smaller.
+\begin{itemize}
+\item We should prefer the the larger model.
+\end{itemize}
+
+\end{frame}
+
+\watermarkon %-----------------------------------------------------------------%
+
+\sectionslide{Categorical Predictors}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}{Categorical Predictors}
+
+  Most of the predictors we've considered thus far have been
+  \emph{quantitative}.
+  \vc
+  \begin{itemize}
+  \item Continuous variables that can take any real value in their range
+    \vc
+  \item Interval or Ratio scaling
+  \end{itemize}
+  \vb
+  We often want to include grouping factors as predictors.
+  \vc
+  \begin{itemize}
+  \item These variables are \emph{qualitative}.
+    \begin{itemize}
+    \item Their values are simply labels.
+      \vc
+    \item There is no ordering of the categories.
+      \vc
+    \item Nominal scaling
+    \end{itemize}
+  \end{itemize}
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}{How to Model Categorical Predictors}
+
+  We need to be careful when we include categorical predictors into a regression
+  model.
+  \vc
+  \begin{itemize}
+  \item The variables need to be coded before entering the model
+  \end{itemize}
+  \vb
+  Consider the following indicator of major:
+  $X_{maj} = \{1 = \textit{Law}, 2 = \textit{Economics}, 3 = \textit{Data Science}\}$
+  \vc
+  \begin{itemize}
+    \item What would happen if we na\"ively used this variable to predict
+      program satisfaction?
+  \end{itemize}
+
+\end{frame}
+
+\watermarkoff %----------------------------------------------------------------%
+
+\begin{frame}[allowframebreaks, fragile]{How to Model Categorical Predictors}
+
+<<>>=
+mDat <- readRDS("../data/major_data.rds")
+mDat[seq(25, 150, 25), ]
+out1 <- lm(sat ~ majN, data = mDat)
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile]{How to Model Categorical Predictors}
+
+<<>>=
+partSummary(out1, -1)
+@
+
+\end{frame}
+
+\watermarkon %-----------------------------------------------------------------%
+
+\begin{frame}{Dummy Coding}
+
+  The most common way to code categorical predictors is \emph{dummy coding}.
+  \vb
+  \begin{itemize}
+  \item A $G$-level factor must be converted into a set of $G - 1$ dummy codes.
+    \vb
+  \item Each code is a variable on the dataset that equals 1 for observations
+    corresponding to the code's group and equals 0, otherwise.
+    \vb
+  \item The group without a code is called the \emph{reference group}.
+  \end{itemize}
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}{Example Dummy Code}
+ Let's look at the simple example of coding biological sex:
+<<echo = FALSE, results = "asis">>=
+sex  <- factor(sample(c("male", "female"), 10, TRUE))
+male <- as.numeric(model.matrix(~sex)[ , -1])
+
+xTab2 <- xtable(data.frame(sex, male), digits = 0)
+print(xTab2, booktabs = TRUE)
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}{Example Dummy Codes}
+ Now, a slightly more complex  example:
+<<echo = FALSE, results = "asis">>=
+drink <- factor(sample(c("coffee", "tea", "juice"), 10, TRUE))
+
+codes           <- model.matrix(~drink)[ , -1]
+colnames(codes) <- c("juice", "tea")
+
+xTab3 <- xtable(data.frame(drink, codes), digits = 0)
+print(xTab3, booktabs = TRUE)
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}{Using Dummy Codes}
+
+  To use the dummy codes, we simply include the $G - 1$ codes as $G - 1$
+  predictor variables in our regression model.
+  \begin{align*}
+    Y &= \beta_0 + \beta_1 X_{male} + \varepsilon\\
+    Y &= \beta_0 + \beta_1 X_{juice} + \beta_2 X_{tea} + \varepsilon
+  \end{align*}
+  \vx{-18}
+  \begin{itemize}
+  \item The intercept corresponds to the mean of $Y$ for the reference group.
+    \vc
+  \item Each slope represents the difference between the mean of $Y$ in the
+    coded group and the mean of $Y$ in the reference group.
+  \end{itemize}
+
+\end{frame}
+
+\watermarkoff %----------------------------------------------------------------%
+
+\begin{frame}[fragile, allowframebreaks]{Example}
+
+  First, an example with a single, binary dummy code:
+
+<<>>=
+## Read in some data:
+cDat <- readRDS("../data/cars_data.rds")
+
+## Fit and summarize the model:
+out2 <- lm(price ~ mtOpt, data = cDat)
+@
+
+\pagebreak
+
+<<>>=
+partSummary(out2, -1)
+@
+
+\end{frame}
+
+\watermarkon %-----------------------------------------------------------------%
+
+\begin{frame}{Interpretations}
+
+  \begin{itemize}
+  \item The average price of a car without the option for a manual transmission
+    is $\hat{\beta}_0 = \Sexpr{round(coef(out2)[1], 2)}$ thousand dollars.
+    \vb
+  \item The average difference in price between cars that have manual
+    transmissions as an option and those that do not is $\hat{\beta}_1 =
+    \Sexpr{round(coef(out2)[2], 2)}$ thousand dollars.
+  \end{itemize}
+
+\end{frame}
+
+\watermarkoff %----------------------------------------------------------------%
+
+\begin{frame}[fragile]{Example}
+
+Fit a more complex model:
+
+<<>>=
+out3 <- lm(price ~ front + rear, data = cDat)
+partSummary(out3, -1)
+@
+
+\end{frame}
+
+\watermarkon %-----------------------------------------------------------------%
+
+\begin{frame}{Interpretations}
+
+  \begin{itemize}
+  \item The average price of a four-wheel-drive car is $\hat{\beta}_0 =
+    \Sexpr{round(coef(out3)[1], 2)}$ thousand dollars.
+    \vb
+  \item The average difference in price between front-wheel-drive cars and
+    four-wheel-drive cars is $\hat{\beta}_1 = \Sexpr{round(coef(out3)[2], 2)}$
+    thousand dollars.
+   \vb
+  \item The average difference in price between rear-wheel-drive cars and
+    four-wheel-drive cars is $\hat{\beta}_2 = \Sexpr{round(coef(out3)[3], 2)}$
+    thousand dollars.
+  \end{itemize}
+
+\end{frame}
+
+\watermarkoff %----------------------------------------------------------------%
+
+\begin{frame}[fragile]{Example}
+
+  Include two sets of dummy codes:
+
+<<>>=
+out4 <- lm(price ~ mtOpt + front + rear, data = cDat)
+partSummary(out4, -c(1, 2))
+@
+
+\end{frame}
+
+\watermarkon %-----------------------------------------------------------------%
+
+\begin{frame}{Interpretations}
+
+  \begin{itemize}
+  \item The average price of a four-wheel-drive car that does not have a manual
+    transmission option is $\hat{\beta}_0 = \Sexpr{round(coef(out4)[1], 2)}$
+    thousand dollars.
+    \vb
+  \item After controlling for drive type, the average difference in price
+    between cars that have manual transmissions as an option and those that do
+    not is $\hat{\beta}_1 = \Sexpr{round(coef(out4)[2], 2)}$ thousand dollars.
+    \vb
+  \item After controlling for transmission options, the average difference in
+    price between front-wheel-drive cars and four-wheel-drive cars is
+    $\hat{\beta}_2 = \Sexpr{round(coef(out4)[3], 2)}$ thousand dollars.
+   \vb
+  \item After controlling for transmission options, the average difference in
+    price between rear-wheel-drive cars and four-wheel-drive cars is
+    $\hat{\beta}_3 = \Sexpr{round(coef(out4)[4], 2)}$ thousand dollars.
+  \end{itemize}
+
+\end{frame}
+
+\watermarkoff %----------------------------------------------------------------%
+
+\begin{frame}[fragile]{Significance Testing}
+
+  For variables with only two levels, we can test the overall factor's
+  significance by evaluating the significance of a single dummy code.
+
+<<>>=
+partSummary(out2, -c(1, 2))
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile]{Significance Testing}
+
+  For variables with more than two levels, we need to simultaneously evaluate
+  the significance of each of the variable's dummy codes.
+
+<<>>=
+partSummary(out4, -c(1, 2))
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile]{Significance Testing}
+
+<<>>=
+summary(out4)$r.squared - summary(out2)$r.squared
+anova(out2, out4)
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile]{Significance Testing}
+
+  What about models where a single nominal factor is the only predictor?
+
+<<>>=
+partSummary(out3, -c(1, 2))
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile]{Significance Testing}
+
+  We can compare back to an ``intercept-only'' model.
+
+<<>>=
+out0 <- lm(price ~ 1, data = cDat)
+partSummary(out0, -1)
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile]{Significance Testing}
+
+<<>>=
+r2Diff <- summary(out3)$r.squared - summary(out0)$r.squared
+r2Diff
+anova(out0, out3)
+@
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\begin{frame}[fragile]{Significance Testing}
+
+  We don't actually need to do the explicit model comparison, though.
+
+<<>>=
+r2Diff
+summary(out3)$r.squared
+
+anova(out0, out3)[2, "F"]
+summary(out3)$fstatistic[1]
+@
+
+\end{frame}
+
+\watermarkon %-----------------------------------------------------------------%
+
+\begin{frame}{Conclusion}
+
+  \begin{itemize}
+  \item Each variable in a regression model corresponds to a dimension in the
+    data-space.
+    \vc
+    \begin{itemize}
+    \item A regression model with P predictors implies a P-dimensional
+      (hyper)-plane in (P + 1)-dimensional space.
+    \end{itemize}
+    \vb
+  \item The coefficients in MLR are partial coefficients.
+    \vc
+    \begin{itemize}
+    \item Each effect is interpreted as holding other predictors constant.
+    \end{itemize}
+    \vb
+  \item Categorical predictors must be coded before they can be used in our
+    models.
+    \vc
+    \begin{itemize}
+    \item The regression coefficients represent group mean differences.
+    \end{itemize}
+  \end{itemize}
+
+\end{frame}
+
+%------------------------------------------------------------------------------%
+
+\end{document}
